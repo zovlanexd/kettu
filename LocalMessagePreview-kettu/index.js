@@ -7,10 +7,7 @@
   const {
     metro,
     metro: { common },
-    ui: {
-      components: { Forms, Button },
-      toasts: { showToast: toast },
-    },
+    ui: { toasts: { showToast: toast } },
     storage,
     plugin,
   } = vendetta;
@@ -18,7 +15,27 @@
   const React = common.React;
   const { useCallback } = React;
   const { FluxDispatcher } = common;
-  const { FormSection, FormInput, FormSwitch } = Forms;
+  const { View, ScrollView } = common.ReactNative;
+  const { TableRow, TableRowGroup, Stack, TableSwitchRow } = common.components;
+  const findRedesignComponent = (name) => metro.findByProps(name)?.[name];
+  const TextInput = findRedesignComponent("TextInput");
+  const Button = findRedesignComponent("Button");
+
+  function InputRow({ label, value, onChange, placeholder, isClearable }) {
+    return React.createElement(TableRow, {
+      label,
+      subLabel: React.createElement(
+        View,
+        { style: { marginTop: 8 } },
+        React.createElement(TextInput, {
+          placeholder,
+          value,
+          onChange,
+          isClearable,
+        }),
+      ),
+    });
+  }
 
   function ensureShape(d) {
     if (typeof d.channelId !== "string") d.channelId = "";
@@ -233,80 +250,96 @@
     }, [cfg]);
 
     return React.createElement(
-      React.Fragment,
-      null,
+      ScrollView,
+      { style: { flex: 1 }, contentContainerStyle: { paddingBottom: 80 } },
       React.createElement(
-        FormSection,
-        { title: "Send local message" },
-        React.createElement(FormInput, {
-          title: "Target channel ID",
-          value: cfg.channelId,
-          onChange: (v) => {
-            cfg.channelId = v;
-          },
-          placeholder: "Channel snowflake",
-        }),
-        React.createElement(FormInput, {
-          title: "Target user ID",
-          value: cfg.userId,
-          onChange: (v) => {
-            cfg.userId = v;
-          },
-          placeholder: "User snowflake (author shown in UI)",
-        }),
-        React.createElement(FormInput, {
-          title: "Message content",
-          value: cfg.message,
-          onChange: (v) => {
-            cfg.message = v;
-          },
-          placeholder: "Text (or embed body if preview is on)",
-        }),
-        React.createElement(FormSwitch, {
-          label: "Show embed preview",
-          value: cfg.showEmbedPreview,
-          onValueChange: (v) => {
-            cfg.showEmbedPreview = v;
-          },
-        }),
-        React.createElement(FormSwitch, {
-          label: "Auto-replay saved messages after Discord loads",
-          value: cfg.autoReplayOnLoad,
-          onValueChange: (v) => {
-            cfg.autoReplayOnLoad = v;
-          },
-        }),
-        React.createElement(FormInput, {
-          title: "Embed image URL",
-          value: cfg.embedImageUrl,
-          onChange: (v) => {
-            cfg.embedImageUrl = v;
-          },
-          placeholder: "Main image for the embed",
-        })
+        Stack,
+        { style: { paddingVertical: 24, paddingHorizontal: 16 }, spacing: 24 },
+        React.createElement(
+          TableRowGroup,
+          { title: "Send local message" },
+          React.createElement(InputRow, {
+            label: "Target channel ID",
+            value: cfg.channelId,
+            onChange: (v) => {
+              cfg.channelId = v;
+            },
+            placeholder: "Channel snowflake",
+            isClearable: true,
+          }),
+          React.createElement(InputRow, {
+            label: "Target user ID",
+            value: cfg.userId,
+            onChange: (v) => {
+              cfg.userId = v;
+            },
+            placeholder: "User snowflake (author shown in UI)",
+            isClearable: true,
+          }),
+          React.createElement(InputRow, {
+            label: "Message content",
+            value: cfg.message,
+            onChange: (v) => {
+              cfg.message = v;
+            },
+            placeholder: "Text (or embed body if preview is on)",
+            isClearable: true,
+          }),
+          React.createElement(TableSwitchRow, {
+            label: "Show embed preview",
+            subLabel: "Use a rich embed for the message body",
+            value: cfg.showEmbedPreview,
+            onValueChange: (v) => {
+              cfg.showEmbedPreview = v;
+            },
+          }),
+          React.createElement(TableSwitchRow, {
+            label: "Auto-replay after load",
+            subLabel: "Re-inject saved messages when Discord finishes connecting",
+            value: cfg.autoReplayOnLoad,
+            onValueChange: (v) => {
+              cfg.autoReplayOnLoad = v;
+            },
+          }),
+          React.createElement(InputRow, {
+            label: "Embed image URL",
+            value: cfg.embedImageUrl,
+            onChange: (v) => {
+              cfg.embedImageUrl = v;
+            },
+            placeholder: "Main image for the embed",
+            isClearable: true,
+          }),
+        ),
+        React.createElement(
+          TableRowGroup,
+          { title: `Saved locally: ${cfg.cached?.length ?? 0} message(s)` },
+          React.createElement(Button, {
+            text: "Send message",
+            variant: "primary",
+            size: "md",
+            onPress: send,
+            style: { marginBottom: 8 },
+          }),
+          React.createElement(Button, {
+            text: "Replay cached local messages",
+            variant: "secondary",
+            size: "md",
+            onPress: replay,
+            style: { marginBottom: 8 },
+          }),
+          React.createElement(Button, {
+            text: "Clear cached local messages",
+            variant: "secondary",
+            size: "md",
+            onPress: clear,
+          }),
+        ),
       ),
-      React.createElement(
-        FormSection,
-        { title: `Saved locally: ${cfg.cached?.length ?? 0} message(s)` },
-        React.createElement(Button, {
-          text: "Send message",
-          onPress: send,
-          style: { marginBottom: 8 },
-        }),
-        React.createElement(Button, {
-          text: "Replay cached local messages",
-          onPress: replay,
-          style: { marginBottom: 8 },
-        }),
-        React.createElement(Button, {
-          text: "Clear cached local messages",
-          onPress: clear,
-        })
-      )
     );
   }
 
-  return {
+  const pluginApi = {
     onLoad() {
       const cfg = plugin.storage;
       ensureShape(cfg);
@@ -324,4 +357,7 @@
     },
     settings: SettingsPanel,
   };
+
+  // Match bundled plugins (e.g. TextReplace): Kettu/Revenge eval uses ret?.default ?? ret
+  return { default: pluginApi };
 })();
