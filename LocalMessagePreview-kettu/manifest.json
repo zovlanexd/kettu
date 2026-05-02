@@ -1,0 +1,12 @@
+{
+  "name": "Local Message (preview)",
+  "description": "Inject messages only on your client (local). For UI/embed testing. Not sent to Discord servers.",
+  "version": "1.1.0-kettu",
+  "authors": [
+    {
+      "name": "shufflekillsdream_sodfsdf"
+    }
+  ],
+  "main": "index.js",
+  "hash": "kettu-local-preview-1"
+}
