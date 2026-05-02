@@ -3,36 +3,51 @@
  * Kettu: vendetta=>{ return <this file> } — file is an expression (IIFE).
  */
 (() => {
-  const {
-    metro,
-    metro: { common },
-    ui: {
-      assets,
-      toasts: { showToast: toast },
-    },
-    storage,
-    plugin,
-    alerts,
-  } = vendetta;
-
+  const v = typeof vendetta !== "undefined" && vendetta ? vendetta : {};
+  const metro = v.metro;
+  const common = metro?.common || {};
   const React = common.React;
-  const { useCallback, useEffect, useRef, useState } = React;
+  const useCallback = React?.useCallback;
+  const useEffect = React?.useEffect;
+  const useRef = React?.useRef;
+  const useState = React?.useState;
   const { FluxDispatcher } = common;
+  const uiRoot = v.ui || {};
+  const assets = uiRoot.assets;
+  const toastRaw = uiRoot.toasts && uiRoot.toasts.showToast;
+  const toast = (m, icon) => {
+    try {
+      if (typeof toastRaw === "function") toastRaw(m, icon);
+    } catch (_) {}
+  };
+  const storage = v.storage;
+  const plugin = v.plugin;
+  const alerts = v.alerts;
   const getAsset = (n) => assets?.getAssetIDByName?.(n);
   const clipboard = common.clipboard;
 
+  /** Kettu uses PUPU_CUSTOM_PAGE; Revenge/Vendetta often use VendettaCustomPage. Prefer PUPU when both exist. */
   function pushSubPage(navigation, title, render) {
     const payload = { title, render };
-    let route = "VendettaCustomPage";
+    let route = "PUPU_CUSTOM_PAGE";
     try {
       const rn = navigation.getState?.()?.routeNames;
-      if (Array.isArray(rn) && rn.includes("PUPU_CUSTOM_PAGE")) route = "PUPU_CUSTOM_PAGE";
+      if (Array.isArray(rn)) {
+        if (rn.includes("PUPU_CUSTOM_PAGE")) route = "PUPU_CUSTOM_PAGE";
+        else if (rn.includes("VendettaCustomPage")) route = "VendettaCustomPage";
+      }
     } catch (_) {}
-    navigation.push(route, payload);
+    try {
+      navigation.push(route, payload);
+    } catch (_) {
+      try {
+        navigation.push(route === "PUPU_CUSTOM_PAGE" ? "VendettaCustomPage" : "PUPU_CUSTOM_PAGE", payload);
+      } catch (_) {}
+    }
   }
 
   function resolvePluginUi() {
-    const RN = common.ReactNative;
+    const RN = common.ReactNative || {};
     const comps = common.components || {};
     const findRedesign = (name) => metro.findByProps(name)?.[name];
     const TextInput = findRedesign("TextInput");
@@ -45,8 +60,8 @@
       TextInput &&
       Button
     );
-    const Forms = vendetta.ui?.components?.Forms;
-    const legacyButton = vendetta.ui?.components?.Button;
+    const Forms = uiRoot.components?.Forms;
+    const legacyButton = uiRoot.components?.Button;
     const hasForms = !!(
       Forms?.FormInput &&
       Forms?.FormSection &&
@@ -376,9 +391,13 @@
     }, [st]);
 
     const copyJson = useCallback(() => {
-      const body = JSON.stringify(ruleRef.current, null, 2);
-      clipboard.setString(`\`\`\`json\n${body}\n\`\`\``);
-      toast("Preset copied (JSON in markdown).", getAsset("CopyIcon"));
+      try {
+        const body = JSON.stringify(ruleRef.current, null, 2);
+        clipboard?.setString?.(`\`\`\`json\n${body}\n\`\`\``);
+        toast("Preset copied (JSON in markdown).", getAsset("CopyIcon"));
+      } catch (_) {
+        toast("Copy failed.");
+      }
     }, []);
 
     const doDelete = () => {
@@ -477,22 +496,34 @@
             { title: "Actions" },
             React.createElement(ui.TableRow, {
               label: "Send now (local only)",
-              icon: React.createElement(ui.TableRow.Icon, { source: getAsset("SendIcon") || getAsset("ArrowRightIcon") }),
+              ...(ui.TableRow.Icon
+                ? {
+                    icon: React.createElement(ui.TableRow.Icon, {
+                      source: getAsset("SendIcon") || getAsset("ArrowRightIcon"),
+                    }),
+                  }
+                : {}),
               onPress: sendNow,
               arrow: true,
             }),
             React.createElement(ui.TableRow, {
               label: "Copy preset JSON",
-              icon: React.createElement(ui.TableRow.Icon, { source: getAsset("CopyIcon") }),
+              ...(ui.TableRow.Icon
+                ? { icon: React.createElement(ui.TableRow.Icon, { source: getAsset("CopyIcon") }) }
+                : {}),
               onPress: copyJson,
               arrow: true,
             }),
             React.createElement(ui.TableRow, {
               label: "Delete preset",
-              icon: React.createElement(ui.TableRow.Icon, {
-                source: getAsset("TrashIcon"),
-                variant: "danger",
-              }),
+              ...(ui.TableRow.Icon
+                ? {
+                    icon: React.createElement(ui.TableRow.Icon, {
+                      source: getAsset("TrashIcon"),
+                      variant: "danger",
+                    }),
+                  }
+                : {}),
               onPress: confirmDelete,
               variant: "danger",
               arrow: true,
@@ -634,6 +665,17 @@
     const st = storage.useProxy(plugin.storage);
     ensureRoot(st);
     const ui = resolvePluginUi();
+    if (typeof common.NavigationNative?.useNavigation !== "function") {
+      return React.createElement(
+        ui.ScrollView,
+        { style: { flex: 1 }, contentContainerStyle: { padding: 20 } },
+        React.createElement(
+          ui.Text,
+          { style: { color: "#f04747" } },
+          "Navigation is not available here. Open Configure from Plugins (wrench) with the plugin enabled, and turn off Safe Mode if it is on.",
+        ),
+      );
+    }
     const navigation = common.NavigationNative.useNavigation();
 
     const openEditor = (index) => {
@@ -830,11 +872,43 @@
     );
   }
 
+  const hooksOk =
+    typeof React?.createElement === "function" &&
+    typeof useCallback === "function" &&
+    typeof useEffect === "function" &&
+    typeof useRef === "function" &&
+    typeof useState === "function" &&
+    typeof storage?.useProxy === "function" &&
+    plugin?.storage != null;
+
+  function SettingsPanelFallback() {
+    const T = common.ReactNative?.Text;
+    const msg =
+      "LocalMessagePreview could not bind to this client. Missing: " +
+      [
+        !React?.createElement && "React",
+        typeof useState !== "function" && "hooks",
+        typeof storage?.useProxy !== "function" && "storage.useProxy",
+        !plugin?.storage && "plugin.storage",
+      ]
+        .filter(Boolean)
+        .join(", ");
+    return T
+      ? React.createElement(T, { style: { padding: 20, color: "#f04747" } }, msg)
+      : null;
+  }
+
   const pluginApi = {
     onLoad() {
-      const st = plugin.storage;
-      ensureRoot(st);
-      scheduleAutoReplay(st);
+      try {
+        const st = plugin.storage;
+        ensureRoot(st);
+        scheduleAutoReplay(st);
+      } catch (e) {
+        try {
+          toast(String(e?.message || e));
+        } catch (_) {}
+      }
     },
     onUnload() {
       if (_fallbackTimer) {
@@ -846,8 +920,9 @@
         _connUnsub = null;
       }
     },
-    settings: SettingsPanel,
+    settings: hooksOk ? SettingsPanel : SettingsPanelFallback,
   };
 
-  return { ...pluginApi, default: pluginApi };
+  pluginApi.default = pluginApi;
+  return pluginApi;
 })();
